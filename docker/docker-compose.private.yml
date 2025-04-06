@@ -1,0 +1,273 @@
+version: '3.8'
+
+services:
+  # Solana Node
+  solana:
+    image: solanalabs/solana:latest
+    ports:
+      - "8899:8899"  # RPC port
+      - "8900:8900"  # PubSub port
+    volumes:
+      - solana-data:/root/.local/share/solana/install
+    command: solana-test-validator
+
+  # Cosmos Node
+  cosmos-node:
+    image: cosmos/gaia:latest
+    ports:
+      - "26657:26657"  # RPC port
+      - "1317:1317"  # REST API
+    volumes:
+      - cosmos-data:/root/.gaia
+    command: gaiad start
+
+  # Polkadot Node
+  polkadot-node:
+    image: parity/polkadot:latest
+    ports:
+      - "9944:9944"  # WebSocket port
+      - "30333:30333"  # P2P port
+    volumes:
+      - polkadot-data:/polkadot
+    command: --dev --ws-external --rpc-external
+
+  # Algorand Node
+  algorand-node:
+    image: algorand/algod:latest
+    ports:
+      - "4001:4001"  # RPC port
+    volumes:
+      - algorand-data:/var/lib/algorand
+    environment:
+      - ALGOD_NETWORK=devnet
+
+  # Cardano Node
+  cardano-node:
+    image: inputoutput/cardano-node:latest
+    ports:
+      - "3001:3001"  # API port
+    volumes:
+      - cardano-data:/data
+      - ./config/cardano:/config
+    command: run --config /config/cardano-config.yaml
+
+  # Tezos Node
+  tezos-node:
+    image: tezos/tezos:v19.1
+    ports:
+      - "8732:8732"  # RPC port
+    volumes:
+      - tezos-data:/var/run/tezos
+    command: tezos-node
+
+  # Avalanche Node
+  avalanche-node:
+    image: avaplatform/avalanchego:latest
+    ports:
+      - "9650:9650"  # API port
+    volumes:
+      - avalanche-data:/root/.avalanchego
+    command: /avalanchego/build/avalanchego
+
+  # Near Protocol Node
+  near-node:
+    image: nearprotocol/nearcore:latest
+    ports:
+      - "3030:3030"  # RPC port
+    volumes:
+      - near-data:/root/.near
+    command: neard --home /root/.near
+
+  # ===== Layer 2 Nodes =====
+
+  # Optimism Node
+  optimism-node:
+    image: ethereumoptimism/l2geth:latest
+    ports:
+      - "8546:8545"  # RPC port
+      - "8555:8555"  # WS port
+    volumes:
+      - optimism-data:/root/.ethereum
+    environment:
+      - ROLLUP_ENABLE_L2_GAS_POLLING=true
+      - ROLLUP_BACKEND=l1
+      - ROLLUP_VERIFIER_ENABLE=false
+      - ROLLUP_POLL_INTERVAL_FLAG=15s
+      - ROLLUP_TIMESTAMP_REFRESH=15s
+      - ROLLUP_SYNC_SERVICE_ENABLE=true
+      - ROLLUP_CLIENT_HTTP=http://geth:8545
+    depends_on:
+      - geth
+
+  # Arbitrum Node
+  arbitrum-node:
+    image: offchainlabs/arb-node:latest
+    ports:
+      - "8547:8547"  # RPC port
+      - "8548:8548"  # WS port
+    volumes:
+      - arbitrum-data:/home/user/.arbitrum
+    environment:
+      - L1_NODE_URL=http://geth:8545
+    depends_on:
+      - geth
+
+  # zkSync Node
+  zksync-node:
+    image: matterlabs/zksync-era-node:latest
+    ports:
+      - "3031:3030"  # API port (changed to avoid conflict with near-node)
+    volumes:
+      - zksync-data:/var/lib/zksync
+    command: --network localhost
+    depends_on:
+      - geth
+      - postgres
+
+  # StarkNet Node
+  starknet-node:
+    image: shardlabs/starknet-devnet:latest
+    ports:
+      - "5050:5050"  # API port
+    command: --port 5050
+    volumes:
+      - starknet-data:/root/.starknet
+
+  # Polygon zkEVM Node
+  polygon-zkevm-node:
+    image: hermeznetwork/zkevm-node:latest
+    ports:
+      - "8123:8123"  # RPC port
+      - "8124:8124"  # WS port
+    volumes:
+      - polygon-zkevm-data:/app/data
+    environment:
+      - ZKEVM_NODE_ETHERMAN_URL=http://geth:8545
+    depends_on:
+      - geth
+      - postgres
+
+  # ===== Cross-Chain Infrastructure =====
+
+  # IBC Relayer (for Cosmos chains)
+  ibc-relayer:
+    image: cosmos/relayer:latest
+    volumes:
+      - ibc-relayer-data:/root/.relayer
+    command: start
+    depends_on:
+      - cosmos-node
+
+  # Axelar Network (Cross-chain gateway)
+  axelar-node:
+    image: axelarnet/axelar-core:latest
+    ports:
+      - "26659:26657"  # RPC port
+      - "1318:1317"    # REST API
+    volumes:
+      - axelar-data:/root/.axelar
+    command: start
+    depends_on:
+      - geth
+      - cosmos-node
+
+  # Wormhole Bridge
+  wormhole-node:
+    image: ghcr.io/wormhole-foundation/guardiand:latest
+    ports:
+      - "7071:7071"  # API port
+    volumes:
+      - wormhole-data:/root/.wormhole
+    command: node --env=devnet
+    depends_on:
+      - geth
+      - solana
+
+  # LayerZero Endpoint
+  layerzero-node:
+    image: layerzero/layerzero-node:latest
+    ports:
+      - "8111:8111"  # API port
+    volumes:
+      - layerzero-data:/app/data
+    depends_on:
+      - geth
+
+  # ===== Storage Services =====
+
+  # Ceramic Node (for decentralized data)
+  ceramic:
+    image: ceramicnetwork/js-ceramic:latest
+    ports:
+      - "7007:7007"  # API port
+    volumes:
+      - ceramic-data:/root/.ceramic
+    command: daemon --network=inmemory
+
+  # Arweave Node (for permanent storage)
+  arweave:
+    image: martonlederer/arlocal:latest
+    ports:
+      - "1984:1984"  # API port
+
+  # TheGraph Node (for indexing blockchain data)
+  graph-node:
+    image: graphprotocol/graph-node:latest
+    ports:
+      - "8020:8020"  # JSON-RPC port
+      - "8030:8030"  # GraphQL port
+      - "8040:8040"  # Admin port
+    environment:
+      - ethereum=mainnet:http://geth:8545
+      - ipfs=http://ipfs:5001
+    depends_on:
+      - geth
+      - ipfs
+      - postgres
+
+  # ===== Database Systems =====
+
+  # Milvus (Vector Database)
+  milvus:
+    image: milvusdb/milvus:latest
+    ports:
+      - "19530:19530"  # API port
+      - "19121:19121"  # Metrics port
+    environment:
+      - ETCD_ENDPOINTS=etcd:2379
+      - MINIO_ADDRESS=minio:9000
+    volumes:
+      - milvus-data:/var/lib/milvus
+    depends_on:
+      - etcd
+      - minio
+
+volumes:
+  # Blockchain data volumes
+  solana-data:
+  cosmos-data:
+  polkadot-data:
+  algorand-data:
+  cardano-data:
+  tezos-data:
+  avalanche-data:
+  near-data:
+  
+  # Layer 2 data volumes
+  zksync-data:
+  optimism-data:
+  arbitrum-data:
+  starknet-data:
+  polygon-zkevm-data:
+  
+  # Cross-chain data volumes
+  ibc-relayer-data:
+  axelar-data:
+  wormhole-data:
+  layerzero-data:
+  
+  # Storage data volumes
+  ceramic-data:
+  
+  # Database data volumes
+  milvus-data:

@@ -1,0 +1,146 @@
+version: '3.8'
+
+services:
+  # Developer container - we'll build this locally
+  dev-environment:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"  # For Next.js/React apps
+      - "3001:3001"  # For code-server
+      - "5173:5173"  # For Vite
+      - "4200:4200"  # For Angular
+    volumes:
+      - ../..:/app  # Mount the entire project directory
+      - ~/.ssh:/root/.ssh:ro  # Mount SSH keys for git operations
+      - ~/.gitconfig:/root/.gitconfig:ro  # Mount git config
+      - dev-node-modules:/app/node_modules  # Persist node_modules
+      - dev-go-pkg:/app/go/pkg  # Persist Go packages
+      - dev-cargo-registry:/root/.cargo/registry  # Persist Cargo registry
+    environment:
+      # Blockchain RPC endpoints
+      - ETHEREUM_RPC=http://geth:8545
+      # Database connection strings
+      - MONGODB_URI=mongodb://admin:adminpassword@mongodb:27017
+      - POSTGRES_URI=postgresql://postgres:postgres@postgres:5432/postgres
+      - NEO4J_URI=neo4j://neo4j:7687
+    depends_on:
+      # Blockchain nodes
+      - geth
+      # Databases
+      - mongodb
+      - postgres
+      - neo4j
+    command: >
+      bash -c "code-server --bind-addr 0.0.0.0:3001 /app || bash"
+
+  # Ethereum Node (Geth) - official image
+  geth:
+    image: ethereum/client-go:latest
+    ports:
+      - "8545:8545"  # RPC port
+      - "30303:30303"  # P2P port
+    volumes:
+      - geth-data:/root/.ethereum
+    command: --dev --http --http.api eth,net,web3,personal --http.addr 0.0.0.0
+
+  # PostgreSQL (SQL Database) - official image
+  postgres:
+    image: postgres:15
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    command: postgres -c 'max_connections=200' -c 'shared_buffers=2GB'
+
+  # MongoDB (NoSQL Database) - official image
+  mongodb:
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=adminpassword
+    volumes:
+      - mongodb-data:/data/db
+      - mongodb-config:/data/configdb
+    command: mongod --wiredTigerCacheSizeGB 2
+
+  # Neo4j (Graph Database) - official image
+  neo4j:
+    image: neo4j:latest
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    environment:
+      - NEO4J_AUTH=neo4j/password
+      - NEO4J_dbms_memory_pagecache_size=1G
+      - NEO4J_dbms_memory_heap_initial__size=1G
+      - NEO4J_dbms_memory_heap_max__size=2G
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+      - neo4j-plugins:/plugins
+
+  # IPFS Node (for decentralized storage) - official image
+  ipfs:
+    image: ipfs/kubo:latest
+    ports:
+      - "5001:5001"  # API port
+      - "4001:4001"  # P2P port
+      - "8081:8080"  # Gateway port
+    volumes:
+      - ipfs-data:/data/ipfs
+
+  # Etcd (for Milvus) - official image
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.0
+    ports:
+      - "2379:2379"
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+    volumes:
+      - etcd-data:/etcd
+    command: etcd --advertise-client-urls=http://0.0.0.0:2379 --listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+
+  # MinIO (for Milvus) - official image
+  minio:
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    ports:
+      - "9001:9001"  # Console port
+      - "9002:9000"  # API port
+    environment:
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+    volumes:
+      - minio-data:/data
+    command: minio server /data --console-address ":9001"
+
+volumes:
+  # Development volumes
+  dev-node-modules:
+  dev-go-pkg:
+  dev-cargo-registry:
+  
+  # Blockchain data volumes
+  geth-data:
+  
+  # Storage data volumes
+  ipfs-data:
+  
+  # Database data volumes
+  postgres-data:
+  mongodb-data:
+  mongodb-config:
+  neo4j-data:
+  neo4j-logs:
+  neo4j-plugins:
+  etcd-data:
+  minio-data:

@@ -53,9 +53,9 @@ RUN npm install -g create-next-app create-react-app @vue/cli vite
 RUN mkdir -p /opt/web3d && cd /opt/web3d \
     && npm init -y \
     && npm install three aframe aframe-ar aframe-particle-system-component \
-    react-three-fiber @react-three/drei @react-three/xr \
-    babylon.js @babylonjs/core @babylonjs/loaders @babylonjs/materials \
-    playcanvas engine-playcanvas
+    @react-three/fiber @react-three/drei @react-three/xr \
+    @babylonjs/core @babylonjs/loaders @babylonjs/materials \
+    && npm install --save-dev playcanvas vite
 
 # Install Solidity (solc) for Ethereum, Binance Smart Chain, Polygon
 RUN npm install -g solc@0.8.20
@@ -68,6 +68,12 @@ RUN npm install -g hardhat truffle ganache @openzeppelin/contracts ethers web3 \
 # ===== Smart Wallet Libraries and Tools =====
 
 # Install Web3 wallet libraries
+# Install husky globally first
+RUN npm install -g husky
+
+# Set environment variable to disable husky hooks during installation
+ENV HUSKY=0
+
 RUN npm install -g \
     @metamask/sdk \
     @metamask/providers \
@@ -78,7 +84,7 @@ RUN npm install -g \
     @coinbase/wallet-sdk \
     @ledgerhq/hw-app-eth \
     @ledgerhq/hw-transport-webusb \
-    @torus-io/torus-embed \
+    @toruslabs/torus-embed \
     @gnosis.pm/safe-core-sdk \
     @gnosis.pm/safe-ethers-lib \
     @gnosis.pm/safe-service-client \
@@ -100,9 +106,17 @@ RUN git clone https://github.com/trustwallet/wallet-core.git /opt/wallet-core \
     && tools/install-dependencies
 
 # Install EIP-4337 Account Abstraction tools
+# Install Solidity compiler
+RUN npm install -g solc@0.8.20
+
+# Note: Silius installation is skipped due to build issues with solc
+# TODO: Fix Silius installation when the build issues are resolved
+# RUN cargo install --git https://github.com/silius-rs/silius
+
+# Install account abstraction packages
 RUN npm install -g \
-    @eth-infinitism/account-abstraction \
-    @eth-infinitism/bundler \
+    @account-abstraction/sdk \
+    @account-abstraction/contracts \
     @zerodevapp/sdk \
     permissionless
 
@@ -110,7 +124,15 @@ RUN npm install -g \
 
 # Install ZK Rollup tools
 RUN npm install -g \
-    @matter-labs/hardhat-zksync \
+    @matterlabs/hardhat-zksync \
+    @matterlabs/hardhat-zksync-solc \
+    @matterlabs/hardhat-zksync-deploy \
+    @matterlabs/hardhat-zksync-verify \
+    @matterlabs/hardhat-zksync-verify-vyper \
+    @matterlabs/hardhat-zksync-vyper \
+    @matterlabs/hardhat-zksync-upgradable \
+    @matterlabs/hardhat-zksync-node \
+    @matterlabs/hardhat-zksync-ethers \
     @matterlabs/zksync-cli \
     zksync-web3 \
     @arbitrum/sdk \
