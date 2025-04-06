@@ -1,0 +1,440 @@
+version: '3.8'
+
+services:
+  # Developer container
+  dev-environment:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"  # For Next.js/React apps (changed from 8080)
+      - "3001:3001"  # For code-server (changed from 8080)
+      - "5173:5173"  # For Vite
+      - "4200:4200"  # For Angular
+    volumes:
+      - ../..:/app  # Mount the entire project directory
+      - ~/.ssh:/root/.ssh:ro  # Mount SSH keys for git operations
+      - ~/.gitconfig:/root/.gitconfig:ro  # Mount git config
+      - dev-node-modules:/app/node_modules  # Persist node_modules
+      - dev-go-pkg:/app/go/pkg  # Persist Go packages
+      - dev-cargo-registry:/root/.cargo/registry  # Persist Cargo registry
+    environment:
+      # Blockchain RPC endpoints
+      - ETHEREUM_RPC=http://geth:8545
+      - SOLANA_RPC=http://solana:8899
+      - COSMOS_RPC=http://cosmos-node:26657
+      - POLKADOT_RPC=http://polkadot-node:9944
+      - ALGORAND_RPC=http://algorand-node:4001
+      - CARDANO_RPC=http://cardano-node:3001
+      - TEZOS_RPC=http://tezos-node:8732
+      - AVALANCHE_RPC=http://avalanche-node:9650
+      - NEAR_RPC=http://near-node:3030
+      # Layer 2 RPC endpoints
+      - OPTIMISM_RPC=http://optimism-node:8545
+      - ARBITRUM_RPC=http://arbitrum-node:8547
+      - ZKSYNC_RPC=http://zksync-node:3030
+      - STARKNET_RPC=http://starknet-node:5050
+      - POLYGON_ZKEVM_RPC=http://polygon-zkevm-node:8123
+      # Database connection strings
+      - MONGODB_URI=mongodb://admin:adminpassword@mongodb:27017
+      - POSTGRES_URI=postgresql://postgres:postgres@postgres:5432/postgres
+      - NEO4J_URI=neo4j://neo4j:7687
+      - MILVUS_URI=http://milvus:19530
+    depends_on:
+      # Blockchain nodes
+      - geth
+      - solana
+      - cosmos-node
+      - polkadot-node
+      - algorand-node
+      - cardano-node
+      - tezos-node
+      - avalanche-node
+      - near-node
+      # Layer 2 nodes
+      - optimism-node
+      - arbitrum-node
+      - zksync-node
+      - starknet-node
+      - polygon-zkevm-node
+      # Databases
+      - mongodb
+      - postgres
+      - neo4j
+      - milvus
+    command: >
+      bash -c "code-server --bind-addr 0.0.0.0:3001 /app || bash"
+
+  # Ethereum Node (Geth)
+  geth:
+    image: ethereum/client-go:latest
+    ports:
+      - "8545:8545"  # RPC port (not in conflict list)
+      - "30303:30303"  # P2P port
+    volumes:
+      - geth-data:/root/.ethereum
+    command: --dev --http --http.api eth,net,web3,personal --http.addr 0.0.0.0
+
+  # Solana Node
+  solana:
+    image: solanalabs/solana:latest
+    ports:
+      - "8899:8899"  # RPC port (not in conflict list)
+      - "8900:8900"  # PubSub port
+    volumes:
+      - solana-data:/root/.local/share/solana/install
+    command: solana-test-validator
+
+  # Cosmos Node
+  cosmos-node:
+    image: cosmos/gaia:latest
+    ports:
+      - "26657:26657"  # RPC port
+      - "1317:1317"  # REST API
+    volumes:
+      - cosmos-data:/root/.gaia
+    command: gaiad start
+
+  # Polkadot Node
+  polkadot-node:
+    image: parity/polkadot:latest
+    ports:
+      - "9944:9944"  # WebSocket port
+      - "30333:30333"  # P2P port
+    volumes:
+      - polkadot-data:/polkadot
+    command: --dev --ws-external --rpc-external
+
+  # Algorand Node
+  algorand-node:
+    image: algorand/algod:latest
+    ports:
+      - "4001:4001"  # RPC port
+    volumes:
+      - algorand-data:/var/lib/algorand
+    environment:
+      - ALGOD_NETWORK=devnet
+
+  # Cardano Node
+  cardano-node:
+    image: inputoutput/cardano-node:latest
+    ports:
+      - "3001:3001"  # API port
+    volumes:
+      - cardano-data:/data
+      - ./config/cardano:/config
+    command: run --config /config/cardano-config.yaml
+
+  # Tezos Node
+  tezos-node:
+    image: tezos/tezos:v19.1
+    ports:
+      - "8732:8732"  # RPC port
+    volumes:
+      - tezos-data:/var/run/tezos
+    command: tezos-node
+
+  # Avalanche Node
+  avalanche-node:
+    image: avaplatform/avalanchego:latest
+    ports:
+      - "9650:9650"  # API port
+    volumes:
+      - avalanche-data:/root/.avalanchego
+    command: /avalanchego/build/avalanchego
+
+  # Near Protocol Node
+  near-node:
+    image: nearprotocol/nearcore:latest
+    ports:
+      - "3030:3030"  # RPC port
+    volumes:
+      - near-data:/root/.near
+    command: neard --home /root/.near
+
+  # ===== Layer 2 Nodes =====
+
+  # Optimism Node
+  optimism-node:
+    image: ethereumoptimism/l2geth:latest
+    ports:
+      - "8546:8545"  # RPC port
+      - "8555:8555"  # WS port
+    volumes:
+      - optimism-data:/root/.ethereum
+    environment:
+      - ROLLUP_ENABLE_L2_GAS_POLLING=true
+      - ROLLUP_BACKEND=l1
+      - ROLLUP_VERIFIER_ENABLE=false
+      - ROLLUP_POLL_INTERVAL_FLAG=15s
+      - ROLLUP_TIMESTAMP_REFRESH=15s
+      - ROLLUP_SYNC_SERVICE_ENABLE=true
+      - ROLLUP_CLIENT_HTTP=http://geth:8545
+    depends_on:
+      - geth
+
+  # Arbitrum Node
+  arbitrum-node:
+    image: offchainlabs/arb-node:latest
+    ports:
+      - "8547:8547"  # RPC port
+      - "8548:8548"  # WS port
+    volumes:
+      - arbitrum-data:/home/user/.arbitrum
+    environment:
+      - L1_NODE_URL=http://geth:8545
+    depends_on:
+      - geth
+
+  # zkSync Node
+  zksync-node:
+    image: matterlabs/zksync-era-node:latest
+    ports:
+      - "3031:3030"  # API port (changed to avoid conflict with near-node)
+    volumes:
+      - zksync-data:/var/lib/zksync
+    command: --network localhost
+    depends_on:
+      - geth
+      - postgres
+
+  # StarkNet Node
+  starknet-node:
+    image: shardlabs/starknet-devnet:latest
+    ports:
+      - "5050:5050"  # API port
+    command: --port 5050
+    volumes:
+      - starknet-data:/root/.starknet
+
+  # Polygon zkEVM Node
+  polygon-zkevm-node:
+    image: hermeznetwork/zkevm-node:latest
+    ports:
+      - "8123:8123"  # RPC port
+      - "8124:8124"  # WS port
+    volumes:
+      - polygon-zkevm-data:/app/data
+    environment:
+      - ZKEVM_NODE_ETHERMAN_URL=http://geth:8545
+    depends_on:
+      - geth
+      - postgres
+
+  # ===== Cross-Chain Infrastructure =====
+
+  # IBC Relayer (for Cosmos chains)
+  ibc-relayer:
+    image: cosmos/relayer:latest
+    volumes:
+      - ibc-relayer-data:/root/.relayer
+    command: start
+    depends_on:
+      - cosmos-node
+
+  # Axelar Network (Cross-chain gateway)
+  axelar-node:
+    image: axelarnet/axelar-core:latest
+    ports:
+      - "26659:26657"  # RPC port
+      - "1318:1317"    # REST API
+    volumes:
+      - axelar-data:/root/.axelar
+    command: start
+    depends_on:
+      - geth
+      - cosmos-node
+
+  # Wormhole Bridge
+  wormhole-node:
+    image: ghcr.io/wormhole-foundation/guardiand:latest
+    ports:
+      - "7071:7071"  # API port
+    volumes:
+      - wormhole-data:/root/.wormhole
+    command: node --env=devnet
+    depends_on:
+      - geth
+      - solana
+
+  # LayerZero Endpoint
+  layerzero-node:
+    image: layerzero/layerzero-node:latest
+    ports:
+      - "8111:8111"  # API port
+    volumes:
+      - layerzero-data:/app/data
+    depends_on:
+      - geth
+
+  # ===== Storage Services =====
+
+  # IPFS Node (for decentralized storage)
+  ipfs:
+    image: ipfs/kubo:latest
+    ports:
+      - "5001:5001"  # API port
+      - "4001:4001"  # P2P port
+      - "8081:8080"  # Gateway port (changed from 8080)
+    volumes:
+      - ipfs-data:/data/ipfs
+
+  # Ceramic Node (for decentralized data)
+  ceramic:
+    image: ceramicnetwork/js-ceramic:latest
+    ports:
+      - "7007:7007"  # API port
+    volumes:
+      - ceramic-data:/root/.ceramic
+    command: daemon --network=inmemory
+
+  # Arweave Node (for permanent storage)
+  arweave:
+    image: martonlederer/arlocal:latest
+    ports:
+      - "1984:1984"  # API port
+
+  # TheGraph Node (for indexing blockchain data)
+  graph-node:
+    image: graphprotocol/graph-node:latest
+    ports:
+      - "8020:8020"  # JSON-RPC port
+      - "8030:8030"  # GraphQL port
+      - "8040:8040"  # Admin port
+    environment:
+      - ethereum=mainnet:http://geth:8545
+      - ipfs=http://ipfs:5001
+    depends_on:
+      - geth
+      - ipfs
+      - postgres
+    
+  # ===== Database Systems =====
+
+  # PostgreSQL (SQL Database)
+  postgres:
+    image: postgres:15
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    command: postgres -c 'max_connections=200' -c 'shared_buffers=2GB'
+
+  # MongoDB (NoSQL Database)
+  mongodb:
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=adminpassword
+    volumes:
+      - mongodb-data:/data/db
+      - mongodb-config:/data/configdb
+    command: mongod --wiredTigerCacheSizeGB 2
+
+  # Neo4j (Graph Database)
+  neo4j:
+    image: neo4j:latest
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    environment:
+      - NEO4J_AUTH=neo4j/password
+      - NEO4J_dbms_memory_pagecache_size=1G
+      - NEO4J_dbms_memory_heap_initial__size=1G
+      - NEO4J_dbms_memory_heap_max__size=2G
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+      - neo4j-plugins:/plugins
+
+  # Milvus (Vector Database)
+  milvus:
+    image: milvusdb/milvus:latest
+    ports:
+      - "19530:19530"  # API port
+      - "19121:19121"  # Metrics port
+    environment:
+      - ETCD_ENDPOINTS=etcd:2379
+      - MINIO_ADDRESS=minio:9000
+    volumes:
+      - milvus-data:/var/lib/milvus
+    depends_on:
+      - etcd
+      - minio
+
+  # Etcd (for Milvus)
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.0
+    ports:
+      - "2379:2379"
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+    volumes:
+      - etcd-data:/etcd
+    command: etcd --advertise-client-urls=http://0.0.0.0:2379 --listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+
+  # MinIO (for Milvus)
+  minio:
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    ports:
+      - "9001:9001"  # Console port (changed from 9000)
+      - "9002:9000"  # API port (changed from 9000)
+    environment:
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+    volumes:
+      - minio-data:/data
+    command: minio server /data --console-address ":9001"
+
+volumes:
+  # Development volumes
+  dev-node-modules:
+  dev-go-pkg:
+  dev-cargo-registry:
+  
+  # Blockchain data volumes
+  geth-data:
+  solana-data:
+  cosmos-data:
+  polkadot-data:
+  algorand-data:
+  cardano-data:
+  tezos-data:
+  avalanche-data:
+  near-data:
+  
+  # Layer 2 data volumes
+  zksync-data:
+  optimism-data:
+  arbitrum-data:
+  starknet-data:
+  polygon-zkevm-data:
+  
+  # Cross-chain data volumes
+  ibc-relayer-data:
+  axelar-data:
+  wormhole-data:
+  layerzero-data:
+  
+  # Storage data volumes
+  ipfs-data:
+  ceramic-data:
+  
+  # Database data volumes
+  postgres-data:
+  mongodb-data:
+  mongodb-config:
+  neo4j-data:
+  neo4j-logs:
+  neo4j-plugins:
+  milvus-data:
+  etcd-data:
+  minio-data:
