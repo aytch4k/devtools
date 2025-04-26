@@ -133,7 +133,6 @@ RUN npm install -g \
     @matterlabs/hardhat-zksync-upgradable \
     @matterlabs/hardhat-zksync-node \
     @matterlabs/hardhat-zksync-ethers \
-    @matterlabs/zksync-cli \
     zksync-web3 \
     @arbitrum/sdk \
     @optimism/sdk \
